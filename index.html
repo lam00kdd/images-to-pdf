@@ -126,7 +126,7 @@
           <div class="num">3</div>
           <div class="step-body">
             <h2>Tạo tài liệu</h2>
-            <p class="hint">Ảnh dọc sẽ tự xoay 90°, co vừa từng ô và nén theo kích thước in để PDF nhẹ hơn.</p>
+            <p class="hint">Ảnh dọc sẽ tự xoay 90°, co vừa từng ô và tối ưu kích thước in sắc nét.</p>
             <div class="actions">
               <button class="primary" id="createBtn" type="button" disabled>Tạo &amp; tải file PDF</button>
               <button class="clear" id="clearBtn" type="button" hidden>Xóa danh sách ảnh</button>
@@ -194,10 +194,13 @@
         const canvas = document.createElement('canvas');
         canvas.width = bitmap.height; canvas.height = bitmap.width;
         const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
         ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.translate(canvas.width, 0); ctx.rotate(Math.PI / 2);
         ctx.drawImage(bitmap, 0, 0); bitmap.close();
-        const blob = await new Promise((resolve, reject) => canvas.toBlob(b => b ? resolve(b) : reject(new Error('Không thể xoay ảnh')), 'image/jpeg', .92));
+        // Giữ chất lượng cao khi xoay
+        const blob = await new Promise((resolve, reject) => canvas.toBlob(b => b ? resolve(b) : reject(new Error('Không thể xoay ảnh')), 'image/jpeg', 0.95));
         const base = file.name.replace(/\.[^.]+$/, '');
         return new File([blob], `${base}-ngang.jpg`, { type:'image/jpeg', lastModified:file.lastModified });
       }
@@ -288,9 +291,20 @@
         const scale = Math.min(maxW / bitmap.width, maxH / bitmap.height, 1);
         const width = Math.max(1, Math.round(bitmap.width * scale));
         const height = Math.max(1, Math.round(bitmap.height * scale));
-        const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
-        const ctx = canvas.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0,0,width,height); ctx.drawImage(bitmap,0,0,width,height); bitmap.close();
-        return { data: canvas.toDataURL('image/jpeg', .74), width, height };
+        const canvas = document.createElement('canvas'); 
+        canvas.width = width; 
+        canvas.height = height;
+        const ctx = canvas.getContext('2d'); 
+        
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        
+        ctx.fillStyle = '#fff'; 
+        ctx.fillRect(0, 0, width, height); 
+        ctx.drawImage(bitmap, 0, 0, width, height); 
+        bitmap.close();
+        
+        return { data: canvas.toDataURL('image/jpeg', 0.92), width, height };
       }
 
       async function createPdf() {
@@ -302,17 +316,22 @@
           const pageW = 297, pageH = 210, margin = 10, gap = 2;
           const cellW = (pageW - margin * 2 - gap * (cfg.cols - 1)) / cfg.cols;
           const cellH = (pageH - margin * 2 - gap * (cfg.rows - 1)) / cfg.rows;
-          const printDpi = 150;
-          const maxPxW = Math.max(400, Math.round((cellW - 6) * printDpi / 25.4));
-          const maxPxH = Math.max(300, Math.round((cellH - 6) * printDpi / 25.4));
+          
+          // Nâng DPI lên 300 chuẩn in ấn sắc nét
+          const printDpi = 300;
+          const maxPxW = Math.max(800, Math.round((cellW - 6) * printDpi / 25.4));
+          const maxPxH = Math.max(600, Math.round((cellH - 6) * printDpi / 25.4));
+          
           const normalized = [];
           for (let i = 0; i < state.items.length; i++) {
-            setStatus(`Đang nén ảnh ${i + 1}/${state.items.length}…`);
+            setStatus(`Đang xử lý ảnh ${i + 1}/${state.items.length}…`);
             normalized.push(await normalizeImage(state.items[i], maxPxW, maxPxH));
           }
+          
           setStatus('Đang tạo file PDF…');
           const { jsPDF } = window.jspdf;
-          const pdf = new jsPDF({ orientation:'landscape', unit:'mm', format:'a4', compress:false });
+          const pdf = new jsPDF({ orientation:'landscape', unit:'mm', format:'a4', compress: true });
+          
           for (let i = 0; i < normalized.length; i++) {
             if (i > 0 && i % cfg.per === 0) pdf.addPage('a4', 'landscape');
             const slot = i % cfg.per, row = Math.floor(slot / cfg.cols), col = slot % cfg.cols;
@@ -320,9 +339,15 @@
             const im = normalized[i], inner = 3;
             const scale = Math.min((cellW - inner * 2) / im.width, (cellH - inner * 2) / im.height);
             const drawW = im.width * scale, drawH = im.height * scale;
-            pdf.setDrawColor(205, 214, 209); pdf.setLineWidth(.25); pdf.rect(x, y, cellW, cellH);
-            pdf.addImage(im.data, 'JPEG', x + (cellW - drawW) / 2, y + (cellH - drawH) / 2, drawW, drawH, undefined, 'FAST');
+            
+            pdf.setDrawColor(205, 214, 209); 
+            pdf.setLineWidth(.25); 
+            pdf.rect(x, y, cellW, cellH);
+            
+            // Dùng 'SLOW' thay cho 'FAST' để khử răng cưa và giữ chi tiết sắc sảo
+            pdf.addImage(im.data, 'JPEG', x + (cellW - drawW) / 2, y + (cellH - drawH) / 2, drawW, drawH, undefined, 'SLOW');
           }
+          
           const filename = `ghep-anh-a4-${layout()}-${new Date().toISOString().slice(0,10)}.pdf`;
           if (isAppleMobile()) {
             const blob = pdf.output('blob');
@@ -336,7 +361,10 @@
           state.busy = false;
           clearUploadedImages();
         } catch (err) {
-          console.error(err); state.busy = false; render(); setStatus('Không thể tạo file PDF. Hãy thử lại với ít ảnh hơn hoặc ảnh có dung lượng nhỏ hơn.', true);
+          console.error(err); 
+          state.busy = false; 
+          render(); 
+          setStatus('Không thể tạo file PDF. Hãy thử lại với ít ảnh hơn hoặc ảnh có dung lượng nhỏ hơn.', true);
         }
       }
       if (isAppleMobile()) createBtn.textContent = 'Tạo file PDF';
