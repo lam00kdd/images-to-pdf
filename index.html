@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Ghép ảnh vào trang A4 nằm ngang và tải xuống dưới dạng PDF.">
+  <title>Ghép ảnh A4 · Tạo file PDF</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231f4d3d'/%3E%3Cpath d='M17 11h23l9 9v33H17z' fill='%23fff'/%3E%3Cpath d='M40 11v10h9' fill='%23dce9e3'/%3E%3Cpath d='M23 31h20M23 38h20M23 45h14' stroke='%23e26d3d' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
+  <script src="jspdf.umd.min.js"></script>
+  <style>
+    :root { --ink:#17352b; --muted:#68756f; --paper:#fff; --canvas:#eef3f0; --line:#d8e2dd; --accent:#e26d3d; --accent-dark:#bd4f24; --green:#1f4d3d; --shadow:0 20px 50px rgba(26,55,44,.11); }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; color:var(--ink); background:radial-gradient(circle at 8% 0%, #dfece5 0, transparent 32rem), var(--canvas); font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
+    button,input { font:inherit; }
+    button { cursor:pointer; }
+    .shell { width:min(1180px,calc(100% - 32px)); margin:auto; padding:30px 0 48px; }
+    header { display:flex; align-items:center; gap:14px; margin-bottom:24px; }
+    .mark { width:48px; height:48px; display:grid; place-items:center; color:white; background:var(--green); border-radius:14px; box-shadow:0 8px 22px rgba(31,77,61,.2); }
+    h1 { margin:0; font:700 clamp(1.35rem,3vw,2rem)/1.15 Georgia,serif; letter-spacing:-.02em; }
+    header p { margin:3px 0 0; color:var(--muted); font-size:.92rem; }
+    main { display:grid; grid-template-columns:minmax(310px,390px) minmax(0,1fr); gap:22px; align-items:start; }
+    .panel { background:rgba(255,255,255,.93); border:1px solid rgba(255,255,255,.8); border-radius:24px; box-shadow:var(--shadow); }
+    .controls { padding:24px; position:sticky; top:18px; }
+    .step { display:flex; gap:13px; padding-bottom:22px; margin-bottom:22px; border-bottom:1px solid var(--line); }
+    .step:last-of-type { margin-bottom:16px; padding-bottom:0; border:0; }
+    .num { flex:0 0 28px; height:28px; display:grid; place-items:center; border-radius:50%; color:#fff; background:var(--green); font-size:.84rem; font-weight:700; }
+    .step-body { min-width:0; flex:1; }
+    h2 { margin:1px 0 9px; font-size:1rem; }
+    .hint { color:var(--muted); font-size:.86rem; margin:0 0 12px; }
+    .drop { min-height:128px; display:grid; place-items:center; padding:20px; text-align:center; border:2px dashed #acc0b6; border-radius:16px; background:#f8fbf9; transition:.2s ease; }
+    .drop.drag { border-color:var(--accent); background:#fff5f0; transform:translateY(-2px); }
+    .drop strong { display:block; margin-top:7px; }
+    .drop span { display:block; color:var(--muted); font-size:.84rem; }
+    #files { position:absolute; width:1px; height:1px; overflow:hidden; opacity:0; }
+    .pick { margin-top:10px; padding:8px 13px; border:1px solid var(--line); border-radius:10px; background:#fff; color:var(--green); font-weight:650; }
+    .layouts { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .layout { position:relative; }
+    .layout input { position:absolute; opacity:0; }
+    .layout label { display:flex; align-items:center; gap:10px; padding:12px; border:1px solid var(--line); border-radius:13px; cursor:pointer; transition:.18s ease; }
+    .layout input:checked + label { border-color:var(--green); background:#edf5f1; box-shadow:inset 0 0 0 1px var(--green); }
+    .mini-grid { width:32px; height:42px; display:grid; gap:2px; padding:3px; background:white; border:1px solid #9baa9f; }
+    .mini-grid i { background:#b8d0c4; }
+    .g33 { grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr); }
+    .g22 { grid-template-columns:repeat(2,1fr); grid-template-rows:repeat(2,1fr); }
+    .layout b { display:block; font-size:.94rem; }
+    .layout small { color:var(--muted); font-size:.75rem; }
+    .actions { display:grid; gap:10px; }
+    .primary { width:100%; border:0; border-radius:13px; padding:14px 18px; color:#fff; background:var(--accent); font-weight:750; box-shadow:0 9px 20px rgba(226,109,61,.24); }
+    .primary:hover { background:var(--accent-dark); }
+    .primary:disabled { cursor:not-allowed; opacity:.48; box-shadow:none; }
+    .save-box { margin-top:12px; padding:13px; border:1px solid #b8d0c4; border-radius:13px; background:#edf5f1; }
+    .save-box[hidden] { display:none; }
+    .save-button { width:100%; border:1px solid var(--green); border-radius:11px; padding:11px 14px; color:#fff; background:var(--green); font-weight:750; }
+    .save-box p { margin:8px 2px 0; color:var(--muted); font-size:.8rem; line-height:1.4; }
+    .clear { border:0; color:var(--muted); background:transparent; font-size:.88rem; }
+    .status { min-height:24px; margin:10px 0 0; text-align:center; color:var(--muted); font-size:.86rem; }
+    .status.error { color:#a63d25; }
+    .preview { padding:22px; min-height:650px; }
+    .preview-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:18px; }
+    .preview-head h2 { font:700 1.12rem Georgia,serif; margin:0; }
+    .count { color:var(--muted); font-size:.86rem; }
+    .empty { min-height:545px; display:grid; place-items:center; text-align:center; border:1px dashed #bdcbc4; border-radius:18px; color:var(--muted); background:#f8faf9; }
+    .empty[hidden] { display:none; }
+    .empty svg { display:block; margin:0 auto 12px; color:#8aa398; }
+    .pages { display:grid; gap:26px; justify-items:center; }
+    .page-wrap { width:min(100%,560px); }
+    .page-label { margin-bottom:7px; color:var(--muted); font-size:.78rem; }
+    .a4 { aspect-ratio:297/210; display:grid; gap:5px; padding:18px; background:#fff; border:1px solid #e1e5e3; box-shadow:0 12px 28px rgba(28,52,43,.12); }
+    .a4.cols-3 { grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr); }
+    .a4.cols-2 { grid-template-columns:repeat(2,1fr); grid-template-rows:repeat(2,1fr); }
+    .photo { position:relative; overflow:hidden; display:grid; place-items:center; border:1px solid #d7ded9; background:#f1f4f2; }
+    .photo img { width:100%; height:100%; object-fit:contain; }
+    .photo span { position:absolute; right:4px; bottom:3px; padding:1px 5px; color:#fff; background:rgba(20,43,34,.72); border-radius:5px; font-size:.64rem; }
+    .delete-photo { position:absolute; z-index:2; top:6px; right:6px; width:30px; height:30px; display:grid; place-items:center; padding:0 0 2px; border:1px solid rgba(255,255,255,.78); border-radius:50%; color:#fff; background:rgba(157,49,35,.9); box-shadow:0 3px 9px rgba(38,29,25,.2); font-size:1.25rem; line-height:1; }
+    .delete-photo:hover { background:#8f2b20; transform:scale(1.05); }
+    .delete-photo:focus-visible { outline:3px solid rgba(226,109,61,.42); outline-offset:2px; }
+    .footnote { margin:18px 0 0; color:var(--muted); text-align:center; font-size:.78rem; }
+    @media (max-width:820px) { .shell{width:min(100% - 20px,620px);padding-top:18px} main{grid-template-columns:1fr}.controls{position:static}.preview{min-height:0}.empty{min-height:360px} }
+    @media (max-width:430px) { .controls,.preview{padding:17px;border-radius:18px}.layouts{grid-template-columns:1fr}.a4{padding:10px;gap:3px} header p{font-size:.82rem} }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div class="mark" aria-hidden="true">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M6 2h8l4 4v16H6z" fill="currentColor" opacity=".25"/><path d="M14 2v5h5M9 11h6M9 15h6M9 19h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </div>
+      <div><h1>Ghép ảnh A4</h1><p>Tạo file PDF A4 nằm ngang, không tải ảnh lên máy chủ.</p></div>
+    </header>
+
+    <main>
+      <section class="panel controls" aria-label="Thiết lập">
+        <div class="step">
+          <div class="num">1</div>
+          <div class="step-body">
+            <h2>Chọn danh sách ảnh</h2>
+            <div class="drop" id="dropZone">
+              <div>
+                <svg width="34" height="34" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 17.5V6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v11a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5Z" stroke="currentColor" stroke-width="1.7"/><circle cx="9" cy="9" r="1.5" fill="currentColor"/><path d="m5 17 4.3-4.2 3.1 3 2.1-2 4.5 4.3" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+                <strong>Kéo ảnh vào đây</strong><span>JPG, PNG, WebP · chọn nhiều ảnh</span>
+                <button class="pick" type="button" id="pickBtn">Chọn ảnh</button>
+              </div>
+            </div>
+            <input id="files" type="file" accept="image/jpeg,image/png,image/webp" multiple>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="num">2</div>
+          <div class="step-body">
+            <h2>Chọn bố cục A4</h2>
+            <div class="layouts">
+              <div class="layout">
+                <input id="layout33" name="layout" type="radio" value="3x3" checked>
+                <label for="layout33"><span class="mini-grid g33"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span><b>3 × 3</b><small>9 ảnh / trang</small></span></label>
+              </div>
+              <div class="layout">
+                <input id="layout22" name="layout" type="radio" value="2x2">
+                <label for="layout22"><span class="mini-grid g22"><i></i><i></i><i></i><i></i></span><span><b>2 × 2</b><small>4 ảnh / trang</small></span></label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="num">3</div>
+          <div class="step-body">
+            <h2>Tạo tài liệu</h2>
+            <p class="hint">Ảnh dọc sẽ tự xoay 90°, co vừa từng ô và nén theo kích thước in để PDF nhẹ hơn.</p>
+            <div class="actions">
+              <button class="primary" id="createBtn" type="button" disabled>Tạo &amp; tải file PDF</button>
+              <button class="clear" id="clearBtn" type="button" hidden>Xóa danh sách ảnh</button>
+            </div>
+            <div class="save-box" id="saveBox" hidden>
+              <button class="save-button" id="saveMobileBtn" type="button">Lưu PDF vào Tệp…</button>
+              <p>Trên iPhone/iPad, chọn “Save to Files” rồi chọn Downloads hoặc thư mục bạn muốn.</p>
+            </div>
+            <p class="status" id="status" aria-live="polite"></p>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel preview" aria-label="Xem trước">
+        <div class="preview-head"><h2>Xem trước trang in</h2><span class="count" id="count">Chưa có ảnh</span></div>
+        <div class="empty" id="empty"><div><svg width="54" height="54" viewBox="0 0 24 24" fill="none"><path d="M7 3h7l4 4v14H7z" stroke="currentColor" stroke-width="1.5"/><path d="M14 3v5h5M10 12h5M10 16h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>Thêm ảnh để xem bố cục trang A4</div></div>
+        <div class="pages" id="pages"></div>
+        <p class="footnote">Toàn bộ quá trình diễn ra trên thiết bị của bạn. Ảnh không được gửi đi đâu.</p>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    (() => {
+      'use strict';
+      const state = { items: [], busy: false, pendingFile: null, pendingUrl: '' };
+      const $ = (s) => document.querySelector(s);
+      const filesInput = $('#files'), dropZone = $('#dropZone'), pages = $('#pages');
+      const createBtn = $('#createBtn'), clearBtn = $('#clearBtn'), status = $('#status');
+      const saveBox = $('#saveBox'), saveMobileBtn = $('#saveMobileBtn');
+      const layout = () => document.querySelector('input[name="layout"]:checked').value;
+      const config = () => layout() === '3x3' ? { cols:3, rows:3, per:9 } : { cols:2, rows:2, per:4 };
+
+      $('#pickBtn').addEventListener('click', () => filesInput.click());
+      filesInput.addEventListener('change', () => addFiles(filesInput.files));
+      ['dragenter','dragover'].forEach(type => dropZone.addEventListener(type, e => { e.preventDefault(); dropZone.classList.add('drag'); }));
+      ['dragleave','drop'].forEach(type => dropZone.addEventListener(type, e => { e.preventDefault(); dropZone.classList.remove('drag'); }));
+      dropZone.addEventListener('drop', e => addFiles(e.dataTransfer.files));
+      document.querySelectorAll('input[name="layout"]').forEach(el => el.addEventListener('change', () => { resetPendingPdf(); render(); }));
+      clearBtn.addEventListener('click', clearAll);
+      createBtn.addEventListener('click', createPdf);
+      saveMobileBtn.addEventListener('click', savePdfOnMobile);
+
+      async function addFiles(fileList) {
+        const valid = [...fileList].filter(f => /^image\/(jpeg|png|webp)$/.test(f.type));
+        if (!valid.length) return setStatus('Vui lòng chọn ảnh JPG, PNG hoặc WebP.', true);
+        resetPendingPdf();
+        state.busy = true; render();
+        const prepared = [];
+        for (let i = 0; i < valid.length; i++) {
+          setStatus(`Đang kiểm tra chiều ảnh ${i + 1}/${valid.length}…`);
+          try { prepared.push(await rotatePortrait(valid[i])); }
+          catch (err) { console.warn('Không thể xoay ảnh, dùng ảnh gốc.', err); prepared.push(valid[i]); }
+        }
+        prepared.forEach(file => state.items.push({ file, url: URL.createObjectURL(file) }));
+        state.busy = false;
+        filesInput.value = '';
+        setStatus('');
+        render();
+      }
+
+      async function rotatePortrait(file) {
+        const bitmap = await createImageBitmap(file);
+        if (bitmap.width >= bitmap.height) { bitmap.close(); return file; }
+        const canvas = document.createElement('canvas');
+        canvas.width = bitmap.height; canvas.height = bitmap.width;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.translate(canvas.width, 0); ctx.rotate(Math.PI / 2);
+        ctx.drawImage(bitmap, 0, 0); bitmap.close();
+        const blob = await new Promise((resolve, reject) => canvas.toBlob(b => b ? resolve(b) : reject(new Error('Không thể xoay ảnh')), 'image/jpeg', .92));
+        const base = file.name.replace(/\.[^.]+$/, '');
+        return new File([blob], `${base}-ngang.jpg`, { type:'image/jpeg', lastModified:file.lastModified });
+      }
+
+      function clearAll(message = '') {
+        state.items.forEach(x => URL.revokeObjectURL(x.url));
+        state.items = [];
+        pages.replaceChildren();
+        render();
+        setStatus(message);
+      }
+
+      function resetPendingPdf() {
+        state.pendingFile = null;
+        if (state.pendingUrl) URL.revokeObjectURL(state.pendingUrl);
+        state.pendingUrl = '';
+        saveBox.hidden = true;
+      }
+
+      function clearUploadedImages() {
+        state.items.forEach(x => URL.revokeObjectURL(x.url));
+        state.items = [];
+        pages.replaceChildren();
+        render();
+      }
+
+      function isAppleMobile() {
+        return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      }
+
+      async function savePdfOnMobile() {
+        const file = state.pendingFile;
+        if (!file) return;
+        try {
+          if (navigator.share && (!navigator.canShare || navigator.canShare({ files:[file] }))) {
+            await navigator.share({ files:[file], title:file.name });
+            setStatus('Đã mở tùy chọn lưu/chia sẻ PDF.');
+            return;
+          }
+        } catch (err) {
+          if (err?.name === 'AbortError') return;
+          console.warn('Không thể mở bảng chia sẻ, chuyển sang xem PDF.', err);
+        }
+        if (state.pendingUrl) URL.revokeObjectURL(state.pendingUrl);
+        state.pendingUrl = URL.createObjectURL(file);
+        const a = document.createElement('a');
+        a.href = state.pendingUrl; a.target = '_blank'; a.rel = 'noopener';
+        document.body.append(a); a.click(); a.remove();
+        setStatus('PDF đã mở. Chạm nút Chia sẻ của Safari rồi chọn “Save to Files”.');
+      }
+
+      function render() {
+        const { cols, per } = config();
+        pages.replaceChildren();
+        $('#empty').hidden = state.items.length > 0;
+        createBtn.disabled = !state.items.length || state.busy;
+        clearBtn.hidden = !state.items.length;
+        $('#count').textContent = state.items.length ? `${state.items.length} ảnh · ${Math.ceil(state.items.length / per)} trang` : 'Chưa có ảnh';
+        for (let start = 0; start < state.items.length; start += per) {
+          const wrap = document.createElement('div'); wrap.className = 'page-wrap';
+          const label = document.createElement('div'); label.className = 'page-label'; label.textContent = `Trang ${start / per + 1}`;
+          const sheet = document.createElement('div'); sheet.className = `a4 cols-${cols}`;
+          state.items.slice(start, start + per).forEach((item, i) => {
+            const cell = document.createElement('div'); cell.className = 'photo';
+            const img = document.createElement('img'); img.src = item.url; img.alt = item.file.name;
+            const number = document.createElement('span'); number.textContent = start + i + 1;
+            const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'delete-photo';
+            remove.textContent = '×'; remove.setAttribute('aria-label', `Xóa ảnh ${start + i + 1}: ${item.file.name}`);
+            remove.addEventListener('click', () => removeImage(start + i));
+            cell.append(img, remove, number); sheet.append(cell);
+          });
+          wrap.append(label, sheet); pages.append(wrap);
+        }
+      }
+
+      function setStatus(text, isError = false) { status.textContent = text; status.className = `status${isError ? ' error' : ''}`; }
+
+      function removeImage(index) {
+        const [removed] = state.items.splice(index, 1);
+        if (removed) URL.revokeObjectURL(removed.url);
+        resetPendingPdf();
+        render();
+        setStatus(state.items.length ? 'Đã xóa ảnh. Bố cục đã được sắp xếp lại.' : 'Đã xóa ảnh cuối cùng.');
+      }
+
+      async function normalizeImage(item, maxW, maxH) {
+        const bitmap = await createImageBitmap(item.file);
+        const scale = Math.min(maxW / bitmap.width, maxH / bitmap.height, 1);
+        const width = Math.max(1, Math.round(bitmap.width * scale));
+        const height = Math.max(1, Math.round(bitmap.height * scale));
+        const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0,0,width,height); ctx.drawImage(bitmap,0,0,width,height); bitmap.close();
+        return { data: canvas.toDataURL('image/jpeg', .74), width, height };
+      }
+
+      async function createPdf() {
+        if (!state.items.length || state.busy) return;
+        if (!window.jspdf?.jsPDF) return setStatus('Không tải được thư viện tạo PDF. Hãy kiểm tra kết nối mạng và thử lại.', true);
+        state.busy = true; render(); setStatus('Đang xử lý ảnh…');
+        try {
+          const cfg = config();
+          const pageW = 297, pageH = 210, margin = 10, gap = 2;
+          const cellW = (pageW - margin * 2 - gap * (cfg.cols - 1)) / cfg.cols;
+          const cellH = (pageH - margin * 2 - gap * (cfg.rows - 1)) / cfg.rows;
+          const printDpi = 150;
+          const maxPxW = Math.max(400, Math.round((cellW - 6) * printDpi / 25.4));
+          const maxPxH = Math.max(300, Math.round((cellH - 6) * printDpi / 25.4));
+          const normalized = [];
+          for (let i = 0; i < state.items.length; i++) {
+            setStatus(`Đang nén ảnh ${i + 1}/${state.items.length}…`);
+            normalized.push(await normalizeImage(state.items[i], maxPxW, maxPxH));
+          }
+          setStatus('Đang tạo file PDF…');
+          const { jsPDF } = window.jspdf;
+          const pdf = new jsPDF({ orientation:'landscape', unit:'mm', format:'a4', compress:false });
+          for (let i = 0; i < normalized.length; i++) {
+            if (i > 0 && i % cfg.per === 0) pdf.addPage('a4', 'landscape');
+            const slot = i % cfg.per, row = Math.floor(slot / cfg.cols), col = slot % cfg.cols;
+            const x = margin + col * (cellW + gap), y = margin + row * (cellH + gap);
+            const im = normalized[i], inner = 3;
+            const scale = Math.min((cellW - inner * 2) / im.width, (cellH - inner * 2) / im.height);
+            const drawW = im.width * scale, drawH = im.height * scale;
+            pdf.setDrawColor(205, 214, 209); pdf.setLineWidth(.25); pdf.rect(x, y, cellW, cellH);
+            pdf.addImage(im.data, 'JPEG', x + (cellW - drawW) / 2, y + (cellH - drawH) / 2, drawW, drawH, undefined, 'FAST');
+          }
+          const filename = `ghep-anh-a4-${layout()}-${new Date().toISOString().slice(0,10)}.pdf`;
+          if (isAppleMobile()) {
+            const blob = pdf.output('blob');
+            state.pendingFile = new File([blob], filename, { type:'application/pdf' });
+            saveBox.hidden = false;
+            setStatus('PDF đã sẵn sàng. Chạm “Lưu PDF vào Tệp…” để chọn nơi lưu.');
+          } else {
+            pdf.save(filename);
+            setStatus('Đã tải file PDF và xóa ảnh khỏi bộ nhớ.');
+          }
+          state.busy = false;
+          clearUploadedImages();
+        } catch (err) {
+          console.error(err); state.busy = false; render(); setStatus('Không thể tạo file PDF. Hãy thử lại với ít ảnh hơn hoặc ảnh có dung lượng nhỏ hơn.', true);
+        }
+      }
+      if (isAppleMobile()) createBtn.textContent = 'Tạo file PDF';
+      render();
+    })();
+  </script>
+</body>
+</html>
