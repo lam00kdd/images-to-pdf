@@ -344,7 +344,7 @@
       }
 
       function wordDrawing(id, image, cellW, cellH) {
-        const maxCx = (cellW - 180) * 635, maxCy = (cellH - 180) * 635;
+        const maxCx = (cellW - 20) * 635, maxCy = (cellH - 20) * 635;
         const pixelToEmu = 9525;
         const scale = Math.min(maxCx / (image.width * pixelToEmu), maxCy / (image.height * pixelToEmu));
         const cx = Math.round(image.width * pixelToEmu * scale), cy = Math.round(image.height * pixelToEmu * scale);
@@ -362,7 +362,7 @@
             for (let col = 0; col < cfg.cols; col++) {
               const index = start + row * cfg.cols + col;
               const content = index < images.length ? wordDrawing(index + 1, images[index], cellW, cellH) : '<w:p/>';
-              cells += `<w:tc><w:tcPr><w:tcW w:w="${cellW}" w:type="dxa"/><w:vAlign w:val="center"/><w:tcMar><w:top w:w="60" w:type="dxa"/><w:left w:w="60" w:type="dxa"/><w:bottom w:w="60" w:type="dxa"/><w:right w:w="60" w:type="dxa"/></w:tcMar></w:tcPr>${content}</w:tc>`;
+              cells += `<w:tc><w:tcPr><w:tcW w:w="${cellW}" w:type="dxa"/><w:vAlign w:val="center"/><w:tcMar><w:top w:w="0" w:type="dxa"/><w:left w:w="0" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/><w:right w:w="0" w:type="dxa"/></w:tcMar></w:tcPr>${content}</w:tc>`;
             }
             rows += `<w:tr><w:trPr><w:cantSplit/><w:trHeight w:val="${cellH}" w:hRule="exact"/></w:trPr>${cells}</w:tr>`;
           }
