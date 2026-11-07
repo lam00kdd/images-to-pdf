@@ -3,10 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Ghép ảnh vào trang A4 nằm ngang và tải xuống dưới dạng PDF.">
-  <title>Ghép ảnh A4 · Tạo file PDF</title>
+  <meta name="description" content="Ghép ảnh vào trang A4 nằm ngang và tải xuống dưới dạng PDF hoặc Word chất lượng cao.">
+  <title>Ghép ảnh A4 · Tạo PDF hoặc Word</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231f4d3d'/%3E%3Cpath d='M17 11h23l9 9v33H17z' fill='%23fff'/%3E%3Cpath d='M40 11v10h9' fill='%23dce9e3'/%3E%3Cpath d='M23 31h20M23 38h20M23 45h14' stroke='%23e26d3d' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
   <script src="jspdf.umd.min.js"></script>
+  <script src="jszip.min.js"></script>
   <style>
     :root { --ink:#17352b; --muted:#68756f; --paper:#fff; --canvas:#eef3f0; --line:#d8e2dd; --accent:#e26d3d; --accent-dark:#bd4f24; --green:#1f4d3d; --shadow:0 20px 50px rgba(26,55,44,.11); }
     * { box-sizing:border-box; }
@@ -48,6 +49,9 @@
     .primary { width:100%; border:0; border-radius:13px; padding:14px 18px; color:#fff; background:var(--accent); font-weight:750; box-shadow:0 9px 20px rgba(226,109,61,.24); }
     .primary:hover { background:var(--accent-dark); }
     .primary:disabled { cursor:not-allowed; opacity:.48; box-shadow:none; }
+    .word-button { width:100%; border:1px solid var(--green); border-radius:13px; padding:13px 18px; color:var(--green); background:#fff; font-weight:750; }
+    .word-button:hover { color:#fff; background:var(--green); }
+    .word-button:disabled { cursor:not-allowed; opacity:.48; }
     .save-box { margin-top:12px; padding:13px; border:1px solid #b8d0c4; border-radius:13px; background:#edf5f1; }
     .save-box[hidden] { display:none; }
     .save-button { width:100%; border:1px solid var(--green); border-radius:11px; padding:11px 14px; color:#fff; background:var(--green); font-weight:750; }
@@ -85,7 +89,7 @@
       <div class="mark" aria-hidden="true">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M6 2h8l4 4v16H6z" fill="currentColor" opacity=".25"/><path d="M14 2v5h5M9 11h6M9 15h6M9 19h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
       </div>
-      <div><h1>Ghép ảnh A4</h1><p>Tạo file PDF A4 nằm ngang, không tải ảnh lên máy chủ.</p></div>
+      <div><h1>Ghép ảnh A4</h1><p>Tạo PDF nhẹ hoặc Word chất lượng cao, không tải ảnh lên máy chủ.</p></div>
     </header>
 
     <main>
@@ -126,9 +130,10 @@
           <div class="num">3</div>
           <div class="step-body">
             <h2>Tạo tài liệu</h2>
-            <p class="hint">Ảnh dọc sẽ tự xoay 90°, co vừa từng ô và tối ưu kích thước in sắc nét.</p>
+            <p class="hint">PDF được nén để nhẹ hơn. Word giữ nguyên dữ liệu JPG/PNG để ảnh rõ hơn khi in.</p>
             <div class="actions">
               <button class="primary" id="createBtn" type="button" disabled>Tạo &amp; tải file PDF</button>
+              <button class="word-button" id="wordBtn" type="button" disabled>Tạo &amp; tải file Word chất lượng cao</button>
               <button class="clear" id="clearBtn" type="button" hidden>Xóa danh sách ảnh</button>
             </div>
             <div class="save-box" id="saveBox" hidden>
@@ -155,7 +160,7 @@
       const state = { items: [], busy: false, pendingFile: null, pendingUrl: '' };
       const $ = (s) => document.querySelector(s);
       const filesInput = $('#files'), dropZone = $('#dropZone'), pages = $('#pages');
-      const createBtn = $('#createBtn'), clearBtn = $('#clearBtn'), status = $('#status');
+      const createBtn = $('#createBtn'), wordBtn = $('#wordBtn'), clearBtn = $('#clearBtn'), status = $('#status');
       const saveBox = $('#saveBox'), saveMobileBtn = $('#saveMobileBtn');
       const layout = () => document.querySelector('input[name="layout"]:checked').value;
       const config = () => layout() === '3x3' ? { cols:3, rows:3, per:9 } : { cols:2, rows:2, per:4 };
@@ -168,6 +173,7 @@
       document.querySelectorAll('input[name="layout"]').forEach(el => el.addEventListener('change', () => { resetPendingPdf(); render(); }));
       clearBtn.addEventListener('click', clearAll);
       createBtn.addEventListener('click', createPdf);
+      wordBtn.addEventListener('click', createWord);
       saveMobileBtn.addEventListener('click', savePdfOnMobile);
 
       async function addFiles(fileList) {
@@ -194,13 +200,10 @@
         const canvas = document.createElement('canvas');
         canvas.width = bitmap.height; canvas.height = bitmap.width;
         const ctx = canvas.getContext('2d');
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
         ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.translate(canvas.width, 0); ctx.rotate(Math.PI / 2);
         ctx.drawImage(bitmap, 0, 0); bitmap.close();
-        // Giữ chất lượng cao khi xoay
-        const blob = await new Promise((resolve, reject) => canvas.toBlob(b => b ? resolve(b) : reject(new Error('Không thể xoay ảnh')), 'image/jpeg', 0.95));
+        const blob = await new Promise((resolve, reject) => canvas.toBlob(b => b ? resolve(b) : reject(new Error('Không thể xoay ảnh')), 'image/jpeg', .92));
         const base = file.name.replace(/\.[^.]+$/, '');
         return new File([blob], `${base}-ngang.jpg`, { type:'image/jpeg', lastModified:file.lastModified });
       }
@@ -257,6 +260,7 @@
         pages.replaceChildren();
         $('#empty').hidden = state.items.length > 0;
         createBtn.disabled = !state.items.length || state.busy;
+        wordBtn.disabled = !state.items.length || state.busy;
         clearBtn.hidden = !state.items.length;
         $('#count').textContent = state.items.length ? `${state.items.length} ảnh · ${Math.ceil(state.items.length / per)} trang` : 'Chưa có ảnh';
         for (let start = 0; start < state.items.length; start += per) {
@@ -291,20 +295,119 @@
         const scale = Math.min(maxW / bitmap.width, maxH / bitmap.height, 1);
         const width = Math.max(1, Math.round(bitmap.width * scale));
         const height = Math.max(1, Math.round(bitmap.height * scale));
-        const canvas = document.createElement('canvas'); 
-        canvas.width = width; 
-        canvas.height = height;
-        const ctx = canvas.getContext('2d'); 
-        
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        
-        ctx.fillStyle = '#fff'; 
-        ctx.fillRect(0, 0, width, height); 
-        ctx.drawImage(bitmap, 0, 0, width, height); 
-        bitmap.close();
-        
-        return { data: canvas.toDataURL('image/jpeg', 0.92), width, height };
+        const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0,0,width,height); ctx.drawImage(bitmap,0,0,width,height); bitmap.close();
+        return { data: canvas.toDataURL('image/jpeg', .74), width, height };
+      }
+
+      async function prepareWordImage(item) {
+        const file = item.file;
+        const bitmap = await createImageBitmap(file);
+        const width = bitmap.width, height = bitmap.height;
+        if (file.type === 'image/jpeg' || file.type === 'image/png') {
+          bitmap.close();
+          return {
+            data: await file.arrayBuffer(), width, height,
+            ext: file.type === 'image/png' ? 'png' : 'jpg', mime: file.type
+          };
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, width, height); ctx.drawImage(bitmap, 0, 0); bitmap.close();
+        const blob = await new Promise((resolve, reject) => canvas.toBlob(b => b ? resolve(b) : reject(new Error('Không thể chuyển ảnh sang JPG')), 'image/jpeg', .94));
+        return { data: await blob.arrayBuffer(), width, height, ext:'jpg', mime:'image/jpeg' };
+      }
+
+      function wordContentTypes(images) {
+        const imageTypes = [...new Map(images.map(im => [im.ext, im.mime])).entries()]
+          .map(([ext, mime]) => `<Default Extension="${ext}" ContentType="${mime}"/>`).join('');
+        return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>${imageTypes}<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>`;
+      }
+
+      function wordRootRels() {
+        return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>`;
+      }
+
+      function wordCoreXml() {
+        const now = new Date().toISOString();
+        return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>Ghép ảnh A4 chất lượng cao</dc:title><dc:creator>Ghép ảnh A4</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created></cp:coreProperties>`;
+      }
+
+      function wordAppXml() {
+        return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>Microsoft Office Word</Application></Properties>`;
+      }
+
+      function wordDocumentRels(images) {
+        const rels = images.map((im, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image${i + 1}.${im.ext}"/>`).join('');
+        return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${rels}</Relationships>`;
+      }
+
+      function wordDrawing(id, image, cellW, cellH) {
+        const maxCx = (cellW - 180) * 635, maxCy = (cellH - 180) * 635;
+        const pixelToEmu = 9525;
+        const scale = Math.min(maxCx / (image.width * pixelToEmu), maxCy / (image.height * pixelToEmu));
+        const cx = Math.round(image.width * pixelToEmu * scale), cy = Math.round(image.height * pixelToEmu * scale);
+        return `<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="0"/></w:pPr><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="${id}" name="Ảnh ${id}"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="${id}" name="image${id}.${image.ext}"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rId${id}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`;
+      }
+
+      function wordDocumentXml(images, cfg) {
+        const tableW = 15398, tableH = 9400;
+        const cellW = Math.floor(tableW / cfg.cols), cellH = Math.floor(tableH / cfg.rows);
+        let body = '';
+        for (let start = 0; start < images.length; start += cfg.per) {
+          let rows = '';
+          for (let row = 0; row < cfg.rows; row++) {
+            let cells = '';
+            for (let col = 0; col < cfg.cols; col++) {
+              const index = start + row * cfg.cols + col;
+              const content = index < images.length ? wordDrawing(index + 1, images[index], cellW, cellH) : '<w:p/>';
+              cells += `<w:tc><w:tcPr><w:tcW w:w="${cellW}" w:type="dxa"/><w:vAlign w:val="center"/><w:tcMar><w:top w:w="60" w:type="dxa"/><w:left w:w="60" w:type="dxa"/><w:bottom w:w="60" w:type="dxa"/><w:right w:w="60" w:type="dxa"/></w:tcMar></w:tcPr>${content}</w:tc>`;
+            }
+            rows += `<w:tr><w:trPr><w:cantSplit/><w:trHeight w:val="${cellH}" w:hRule="exact"/></w:trPr>${cells}</w:tr>`;
+          }
+          body += `<w:tbl><w:tblPr><w:tblW w:w="${tableW}" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:jc w:val="center"/><w:tblBorders><w:top w:val="single" w:sz="4" w:color="C8C8C8"/><w:left w:val="single" w:sz="4" w:color="C8C8C8"/><w:bottom w:val="single" w:sz="4" w:color="C8C8C8"/><w:right w:val="single" w:sz="4" w:color="C8C8C8"/><w:insideH w:val="single" w:sz="4" w:color="C8C8C8"/><w:insideV w:val="single" w:sz="4" w:color="C8C8C8"/></w:tblBorders></w:tblPr><w:tblGrid>${Array(cfg.cols).fill(`<w:gridCol w:w="${cellW}"/>`).join('')}</w:tblGrid>${rows}</w:tbl>`;
+          if (start + cfg.per < images.length) body += '<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/></w:pPr><w:r><w:br w:type="page"/></w:r></w:p>';
+        }
+        return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body}<w:sectPr><w:pgSz w:w="16838" w:h="11906" w:orient="landscape"/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="0" w:footer="0" w:gutter="0"/></w:sectPr></w:body></w:document>`;
+      }
+
+      async function createWord() {
+        if (!state.items.length || state.busy) return;
+        if (!window.JSZip) return setStatus('Không tải được thư viện tạo Word. Vui lòng tải lại trang.', true);
+        state.busy = true; render(); setStatus('Đang chuẩn bị ảnh chất lượng cao…');
+        try {
+          const cfg = config(), images = [];
+          for (let i = 0; i < state.items.length; i++) {
+            setStatus(`Đang giữ nguyên chất lượng ảnh ${i + 1}/${state.items.length}…`);
+            images.push(await prepareWordImage(state.items[i]));
+          }
+          setStatus('Đang tạo file Word…');
+          const zip = new JSZip();
+          zip.file('[Content_Types].xml', wordContentTypes(images));
+          zip.folder('_rels').file('.rels', wordRootRels());
+          const props = zip.folder('docProps'); props.file('core.xml', wordCoreXml()); props.file('app.xml', wordAppXml());
+          const word = zip.folder('word'); word.file('document.xml', wordDocumentXml(images, cfg));
+          word.folder('_rels').file('document.xml.rels', wordDocumentRels(images));
+          const media = word.folder('media'); images.forEach((im, i) => media.file(`image${i + 1}.${im.ext}`, im.data));
+          const blob = await zip.generateAsync({ type:'blob', compression:'DEFLATE', compressionOptions:{ level:6 } });
+          const filename = `ghep-anh-a4-${layout()}-${new Date().toISOString().slice(0,10)}.docx`;
+          if (isAppleMobile()) {
+            resetPendingPdf();
+            state.pendingFile = new File([blob], filename, { type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+            saveMobileBtn.textContent = 'Lưu file Word vào Tệp…'; saveBox.hidden = false;
+            setStatus('File Word đã sẵn sàng. Chạm “Lưu file Word vào Tệp…” để chọn nơi lưu.');
+          } else {
+            const url = URL.createObjectURL(blob), a = document.createElement('a');
+            a.href = url; a.download = filename; document.body.append(a); a.click(); a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 2000);
+            setStatus('Đã tải file Word chất lượng cao và xóa ảnh khỏi bộ nhớ.');
+          }
+          state.busy = false; clearUploadedImages();
+        } catch (err) {
+          console.error(err); state.busy = false; render();
+          setStatus('Không thể tạo file Word. Hãy thử lại với ít ảnh hơn.', true);
+        }
       }
 
       async function createPdf() {
@@ -316,22 +419,17 @@
           const pageW = 297, pageH = 210, margin = 10, gap = 2;
           const cellW = (pageW - margin * 2 - gap * (cfg.cols - 1)) / cfg.cols;
           const cellH = (pageH - margin * 2 - gap * (cfg.rows - 1)) / cfg.rows;
-          
-          // Nâng DPI lên 300 chuẩn in ấn sắc nét
-          const printDpi = 300;
-          const maxPxW = Math.max(800, Math.round((cellW - 6) * printDpi / 25.4));
-          const maxPxH = Math.max(600, Math.round((cellH - 6) * printDpi / 25.4));
-          
+          const printDpi = 150;
+          const maxPxW = Math.max(400, Math.round((cellW - 6) * printDpi / 25.4));
+          const maxPxH = Math.max(300, Math.round((cellH - 6) * printDpi / 25.4));
           const normalized = [];
           for (let i = 0; i < state.items.length; i++) {
-            setStatus(`Đang xử lý ảnh ${i + 1}/${state.items.length}…`);
+            setStatus(`Đang nén ảnh ${i + 1}/${state.items.length}…`);
             normalized.push(await normalizeImage(state.items[i], maxPxW, maxPxH));
           }
-          
           setStatus('Đang tạo file PDF…');
           const { jsPDF } = window.jspdf;
-          const pdf = new jsPDF({ orientation:'landscape', unit:'mm', format:'a4', compress: true });
-          
+          const pdf = new jsPDF({ orientation:'landscape', unit:'mm', format:'a4', compress:false });
           for (let i = 0; i < normalized.length; i++) {
             if (i > 0 && i % cfg.per === 0) pdf.addPage('a4', 'landscape');
             const slot = i % cfg.per, row = Math.floor(slot / cfg.cols), col = slot % cfg.cols;
@@ -339,19 +437,14 @@
             const im = normalized[i], inner = 3;
             const scale = Math.min((cellW - inner * 2) / im.width, (cellH - inner * 2) / im.height);
             const drawW = im.width * scale, drawH = im.height * scale;
-            
-            pdf.setDrawColor(205, 214, 209); 
-            pdf.setLineWidth(.25); 
-            pdf.rect(x, y, cellW, cellH);
-            
-            // Dùng 'SLOW' thay cho 'FAST' để khử răng cưa và giữ chi tiết sắc sảo
-            pdf.addImage(im.data, 'JPEG', x + (cellW - drawW) / 2, y + (cellH - drawH) / 2, drawW, drawH, undefined, 'SLOW');
+            pdf.setDrawColor(205, 214, 209); pdf.setLineWidth(.25); pdf.rect(x, y, cellW, cellH);
+            pdf.addImage(im.data, 'JPEG', x + (cellW - drawW) / 2, y + (cellH - drawH) / 2, drawW, drawH, undefined, 'FAST');
           }
-          
           const filename = `ghep-anh-a4-${layout()}-${new Date().toISOString().slice(0,10)}.pdf`;
           if (isAppleMobile()) {
             const blob = pdf.output('blob');
             state.pendingFile = new File([blob], filename, { type:'application/pdf' });
+            saveMobileBtn.textContent = 'Lưu PDF vào Tệp…';
             saveBox.hidden = false;
             setStatus('PDF đã sẵn sàng. Chạm “Lưu PDF vào Tệp…” để chọn nơi lưu.');
           } else {
@@ -361,10 +454,7 @@
           state.busy = false;
           clearUploadedImages();
         } catch (err) {
-          console.error(err); 
-          state.busy = false; 
-          render(); 
-          setStatus('Không thể tạo file PDF. Hãy thử lại với ít ảnh hơn hoặc ảnh có dung lượng nhỏ hơn.', true);
+          console.error(err); state.busy = false; render(); setStatus('Không thể tạo file PDF. Hãy thử lại với ít ảnh hơn hoặc ảnh có dung lượng nhỏ hơn.', true);
         }
       }
       if (isAppleMobile()) createBtn.textContent = 'Tạo file PDF';
@@ -373,3 +463,4 @@
   </script>
 </body>
 </html>
+
